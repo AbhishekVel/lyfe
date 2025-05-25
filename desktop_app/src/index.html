@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Photo Gallery</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="header">
+        <h1>📸 Photo Gallery</h1>
+        <div class="header-info">
+            <span id="photo-count">Loading photos...</span>
+            <button id="refresh-btn" class="refresh-btn">🔄 Refresh</button>
+        </div>
+    </div>
+    
+    <div class="search-container">
+        <input type="text" id="search-input" placeholder="Search photos by filename..." />
+    </div>
+    
+    <div class="loading" id="loading">
+        <div class="loading-spinner"></div>
+        <p>Loading photos from ~/Desktop/local_photos...</p>
+    </div>
+    
+    <div class="no-photos" id="no-photos" style="display: none;">
+        <div class="no-photos-content">
+            <h2>📂 No Photos Found</h2>
+            <p>No images were found in <code>~/Desktop/local_photos</code></p>
+            <p>Please make sure the directory exists and contains image files (jpg, png, gif, etc.)</p>
+        </div>
+    </div>
+    
+    <div class="gallery" id="gallery"></div>
+    
+    <!-- Pagination controls -->
+    <div class="pagination-container">
+        <div class="pagination-info" id="pagination-info"></div>
+        <button id="load-more-btn" class="load-more-btn" style="display: none;">Load More</button>
+    </div>
+    
+    <!-- Photo modal for full-size viewing -->
+    <div class="modal" id="photo-modal">
+        <div class="modal-content">
+            <span class="close">&times;</span>
+            <img id="modal-image" src="" alt="">
+            <div class="modal-info">
+                <h3 id="modal-filename"></h3>
+                <p id="modal-path"></p>
+            </div>
+        </div>
+    </div>
+    
+    <script src="renderer.js"></script>
+</body>
+</html> 

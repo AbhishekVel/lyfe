@@ -10,4 +10,7 @@ dependencies = [
     "pillow>=11.2.1",
     "pinecone>=6.0.2",
     "tqdm>=4.67.1",
+    "pyside6>=6.8.0",
+    "flask>=3.1.1",
+    "flask-cors>=6.0.0",
 ]
