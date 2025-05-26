@@ -2,12 +2,17 @@ from flask import Flask
 from flask_cors import CORS
 import os
 from routes import register_routes
+from database import init_db
+from models import Photo  # Import models to register them
 
 
 def create_app():
     """Create and configure the Flask application"""
     app = Flask(__name__)
     CORS(app)  # Enable CORS for all routes
+    
+    # Initialize database
+    init_db(app)
     
     # Register routes
     register_routes(app)
@@ -25,4 +30,11 @@ if __name__ == '__main__':
         exit(1)
     
     app = create_app()
+    
+    # Create database tables
+    with app.app_context():
+        from database import db
+        db.create_all()
+        print("Database tables created successfully!")
+    
     app.run(debug=True, host='0.0.0.0', port=8000)
