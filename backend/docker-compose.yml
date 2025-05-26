@@ -6,7 +6,7 @@ services:
       context: .
       dockerfile: Dockerfile
     ports:
-      - "7100:7100"
+      - "8000:8000"
     environment:
       - GCP_PROJECT_ID=${GCP_PROJECT_ID}
       - PINECONE_API_KEY=${PINECONE_API_KEY}
@@ -19,11 +19,25 @@ services:
       - photo_data:/app/photos
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:7100/health"]
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 30s
       timeout: 10s
       retries: 3
       start_period: 40s
 
+  postgres:
+    image: postgres:15-alpine
+    container_name: photos-postgres
+    ports:
+      - "5432:5432"
+    environment:
+      - POSTGRES_DB=photos_db
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=password123
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    restart: unless-stopped
+
 volumes:
-  photo_data: 
+  photo_data:
+  postgres_data: 
