@@ -1,7 +1,14 @@
 """
 Script lets you upload photos, embeds them, and stores into a vector db (pinecone).
 """
+from main import create_app
+import base64
+from datetime import datetime
+from models import Photo
+from geopy.geocoders import Nominatim
 
+from PIL.ExifTags import GPSTAGS
+from PIL.ExifTags import TAGS
 from PIL import Image as PILImage
 from io import BytesIO
 import os
@@ -30,15 +37,10 @@ def find_photos_in_dir(dir: str) -> List[str]:
 
 
 def get_resized_image_bytes(path: str) -> bytes:
-    """Resize image to 512px width maintaining aspect ratio and return as bytes."""
+    """Resize image to 512x512 regardless of aspect ratio and return as bytes."""
     with PILImage.open(path) as img:
-        # Calculate height to maintain aspect ratio
-        width = 512
-        aspect_ratio = img.height / img.width
-        height = int(width * aspect_ratio)
-
-        # Resize image
-        resized_img = img.resize((width, height))
+        # Resize to fixed 512x512 size
+        resized_img = img.resize((512, 512), PILImage.Resampling.LANCZOS)
 
         # Convert to bytes
         img_byte_arr = BytesIO()
@@ -46,8 +48,8 @@ def get_resized_image_bytes(path: str) -> bytes:
         return img_byte_arr.getvalue()
 
 
-def gen_image_embedding(path: str):
-    image = VertexImage(image_bytes=get_resized_image_bytes(path))
+def gen_image_embedding(image: bytes):
+    image = VertexImage(image_bytes=image)
     embeddings = model.get_embeddings(
         image=image,
         dimension=VECTOR_DIMENSION,
@@ -57,8 +59,6 @@ def gen_image_embedding(path: str):
 
 def get_gps_coords_from_image(path: str) -> Optional[tuple[float, float]]:
     try:
-        from PIL.ExifTags import GPSTAGS
-        from PIL.ExifTags import TAGS
         
         with PILImage.open(path) as img:
             # Get EXIF data
@@ -99,13 +99,35 @@ def get_gps_coords_from_image(path: str) -> Optional[tuple[float, float]]:
 
 def get_image_location(path: str) -> Optional[str]:
     gps_coords = get_gps_coords_from_image(path)
-    # use geopy to get the location name from the gps coords
-    from geopy.geocoders import Nominatim
+    if not gps_coords:
+        return None
     geolocator = Nominatim(user_agent="abhi-agent")
-    location = geolocator.reverse(gps_coords)
+    location = geolocator.reverse(f"{gps_coords[0]}, {gps_coords[1]}")
     if not location:
         return None
     return location.address
+
+def get_image_timestamp(path: str) -> Optional[datetime]:
+    """Extract timestamp from image EXIF data"""
+    try:
+        with PILImage.open(path) as img:
+            # Get EXIF data
+            exif = img._getexif()
+            if not exif:
+                return None
+                
+            # Look for DateTimeOriginal or DateTime tags
+            for tag_id in exif:
+                tag = TAGS.get(tag_id, tag_id)
+                if tag in ["DateTimeOriginal", "DateTime"]:
+                    # EXIF datetime format: "YYYY:MM:DD HH:MM:SS"
+                    date_str = exif[tag_id]
+                    return datetime.strptime(date_str, "%Y:%m:%d %H:%M:%S")
+                    
+            return None
+    except:
+        return None
+
 
 def gen_text_embedding(text: str) -> list[float]:
     embeddings = model.get_embeddings(
@@ -114,22 +136,21 @@ def gen_text_embedding(text: str) -> list[float]:
     )
     return embeddings.text_embedding
 
-def exists_in_index(path: str, type: str) -> bool:
+def exists_in_index(id: int, type: str) -> bool:
     index = pc.Index(PHOTOS_INDEX_NAME)
     return bool(index.fetch(
-        ids=[f"{type}:{path}"], namespace=PHOTOS_NAMESPACE
+        ids=[f"{type}:{id}"], namespace=PHOTOS_NAMESPACE
     ).vectors)
 
 
-def update_index(path: str, embedding: list[float], namespace: str):
+def update_index(id: int, embedding: list[float], namespace: str):
     index = pc.Index(PHOTOS_INDEX_NAME)
     index.upsert(
         vectors=[
             {
-                "id": path,
+                "id": str(id),
                 "values": embedding,
                 "metadata": {
-                    "path": path,
                 },
             },
         ],
@@ -146,14 +167,32 @@ def gen_caption_embedding(path: str) -> Optional[list[float]]:
 def upload_photos(dir: str):
     for path in tqdm(find_photos_in_dir(dir), desc="Processing photos"):
         try:
-            # First check to see if the image is already in the index
-            if not exists_in_index(path, PHOTOS_NAMESPACE):
-                image_embedding = gen_image_embedding(path)
-                update_index(path=path, embedding=image_embedding, namespace=PHOTOS_NAMESPACE)
-            if not exists_in_index(path, LOCATION_NAMESPACE):
-                caption_embedding = gen_caption_embedding(path)
-                if caption_embedding:
-                    update_index(path=path, embedding=caption_embedding, namespace=LOCATION_NAMESPACE)
+            # First check to see if the image  is already in the database
+            photo = Photo.query.filter_by(path=path).first()
+            if photo:
+                print(f"Photo {path} already exists in the database")
+                continue
+        
+
+            # Convert resized bytes to base64
+            image_bytes = get_resized_image_bytes(path)
+            photo_data = base64.b64encode(image_bytes).decode('utf-8')
+            file_type = path.split('.')[-1].lower()
+
+
+            # Resize image and get location
+            location = get_image_location(path)
+            timestamp = get_image_timestamp(path)
+            photo_row = Photo.create_photo(
+                data=photo_data,
+                file_type=file_type,
+                path=path,
+                location=location,
+                timestamp=timestamp
+            )
+
+            image_embedding = gen_image_embedding(image_bytes)
+            update_index(id=photo_row.id, embedding=image_embedding, namespace=PHOTOS_NAMESPACE)
         except Exception as e:
             print(f"Error processing photo {path}: {e}")
             continue
@@ -188,10 +227,15 @@ def main():
 
     args = parser.parse_args()
 
-    if args.upload:
-        upload_photos(args.upload)
-    elif args.find:
-        print(find_photos(args.find))
+    app = create_app()
+    with app.app_context():
+        try:
+            if args.upload:
+                upload_photos(args.upload)
+            elif args.find:
+                print(find_photos(args.find))
+        except Exception as e:
+            print(f"Error: {e}")
 
 
 if __name__ == "__main__":

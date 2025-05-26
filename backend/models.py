@@ -15,12 +15,14 @@ class Photo(db.Model):
     # File type (e.g., 'png', 'jpg', 'jpeg')
     file_type = db.Column(db.String(10), nullable=False)
     
+    # Original file path
+    path = db.Column(db.String(1000), nullable=False)
+    
     # Location as string
     location = db.Column(db.String(500), nullable=True)
     
     # Timestamps for tracking
-    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
-    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+    timestamp = db.Column(db.DateTime, nullable=True)
     
     def __repr__(self):
         return f'<Photo {self.id}: {self.file_type} at {self.location or "unknown location"}>'
@@ -31,18 +33,20 @@ class Photo(db.Model):
             'id': self.id,
             'data': self.data,
             'file_type': self.file_type,
+            'path': self.path,
             'location': self.location,
-            'created_at': self.created_at.isoformat() if self.created_at else None,
-            'updated_at': self.updated_at.isoformat() if self.updated_at else None
+            'timestamp': self.timestamp.isoformat() if self.timestamp else None
         }
     
     @classmethod
-    def create_photo(cls, data, file_type, location=None):
+    def create_photo(cls, data, file_type, path=None, location=None, timestamp=None):
         """Create a new photo record"""
         photo = cls(
             data=data,
             file_type=file_type,
-            location=location
+            path=path,
+            location=location,
+            timestamp=timestamp
         )
         db.session.add(photo)
         db.session.commit()
