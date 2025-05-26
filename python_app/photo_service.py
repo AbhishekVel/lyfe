@@ -1,18 +1,15 @@
-from flask import Flask, request, jsonify
-from flask_cors import CORS
 import os
 from pathlib import Path
 from typing import List, Optional
 from PIL import Image as PILImage
+from PIL.ExifTags import GPSTAGS
+from PIL.ExifTags import TAGS
 from io import BytesIO
 from tqdm import tqdm
 import vertexai
 from vertexai.vision_models import Image as VertexImage, MultiModalEmbeddingModel
 from pinecone import Pinecone
 from constants import LOCATION_NAMESPACE, PHOTOS_INDEX_NAME, PHOTOS_NAMESPACE, VECTOR_DIMENSION
-
-app = Flask(__name__)
-CORS(app)  # Enable CORS for all routes
 
 # Initialize services
 vertexai.init(project=os.getenv("GCP_PROJECT_ID"), location="us-central1")
@@ -57,8 +54,6 @@ def gen_image_embedding(path: str):
 
 def get_gps_coords_from_image(path: str) -> Optional[tuple[float, float]]:
     try:
-        from PIL.ExifTags import GPSTAGS
-        from PIL.ExifTags import TAGS
         
         with PILImage.open(path) as img:
             # Get EXIF data
@@ -206,84 +201,4 @@ def search_photos(query: str):
 
         return matches
     except Exception as e:
-        raise Exception(f"Error searching photos: {str(e)}")
-
-
-@app.route('/health', methods=['GET'])
-def health_check():
-    """Health check endpoint"""
-    return jsonify({"status": "healthy", "service": "photo-vector-db"})
-
-
-@app.route('/upload', methods=['POST'])
-def upload_photos_endpoint():
-    """
-    Upload photos from a directory to the vector database
-    Expected JSON payload: {"directory": "/path/to/photos"}
-    """
-    try:
-        data = request.get_json()
-        if not data or 'directory' not in data:
-            return jsonify({"error": "Missing 'directory' field in request body"}), 400
-        
-        directory = data['directory']
-        
-        # Validate directory exists
-        if not os.path.exists(directory):
-            return jsonify({"error": f"Directory '{directory}' does not exist"}), 400
-        
-        if not os.path.isdir(directory):
-            return jsonify({"error": f"Path '{directory}' is not a directory"}), 400
-        
-        # Process photos
-        result = upload_photos_to_db(directory)
-        
-        return jsonify({
-            "success": True,
-            "message": f"Processed {result['processed']} out of {result['total_found']} photos",
-            "details": result
-        })
-        
-    except Exception as e:
-        return jsonify({"error": f"Failed to upload photos: {str(e)}"}), 500
-
-
-@app.route('/search', methods=['POST'])
-def search_photos_endpoint():
-    """
-    Search for photos using a text query
-    Expected JSON payload: {"query": "search text"}
-    """
-    try:
-        data = request.get_json()
-        if not data or 'query' not in data:
-            return jsonify({"error": "Missing 'query' field in request body"}), 400
-        
-        query = data['query'].strip()
-        if not query:
-            return jsonify({"error": "Query cannot be empty"}), 400
-        
-        # Search photos
-        matches = search_photos(query)
-        
-        return jsonify({
-            "success": True,
-            "query": query,
-            "matches": matches,
-            "count": len(matches)
-        })
-        
-    except Exception as e:
-        return jsonify({"error": f"Failed to search photos: {str(e)}"}), 500
-
-
-if __name__ == '__main__':
-    # Check required environment variables
-    required_env_vars = ["GCP_PROJECT_ID", "PINECONE_API_KEY"]
-    missing_vars = [var for var in required_env_vars if not os.getenv(var)]
-    
-    if missing_vars:
-        print(f"Error: Missing required environment variables: {', '.join(missing_vars)}")
-        exit(1)
-    
-    app.run(debug=True, host='0.0.0.0', port=7100) 
+        raise Exception(f"Error searching photos: {str(e)}") 
