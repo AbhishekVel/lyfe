@@ -1,0 +1,29 @@
+version: '3.8'
+
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "7100:7100"
+    environment:
+      - GCP_PROJECT_ID=${GCP_PROJECT_ID}
+      - PINECONE_API_KEY=${PINECONE_API_KEY}
+      - FLASK_ENV=production
+      - GOOGLE_APPLICATION_CREDENTIALS=/app/gcloud/application_default_credentials.json
+    volumes:
+      # Mount Google Cloud credentials
+      - ~/.config/gcloud:/app/gcloud:ro
+      # Mount a volume for photo storage if needed
+      - photo_data:/app/photos
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:7100/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+volumes:
+  photo_data: 
