@@ -176,17 +176,24 @@
   max-width: 1400px;
   margin: 0 auto;
   padding: 20px;
-  text-align: center;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 20px;
 }
 
-.footer-content p {
+.footer-status p {
   margin: 0;
   color: #666;
   font-size: 0.9rem;
   display: flex;
   align-items: center;
-  justify-content: center;
   gap: 8px;
+}
+
+.footer-actions {
+  display: flex;
+  align-items: center;
 }
 
 .status-indicator {
@@ -262,10 +269,14 @@
   
   .footer-content {
     padding: 15px;
+    flex-direction: column;
+    text-align: center;
+    gap: 15px;
   }
   
-  .footer-content p {
+  .footer-status p {
     font-size: 0.85rem;
+    justify-content: center;
   }
 }
 

@@ -27,7 +27,9 @@ const SearchBar: React.FC<SearchBarProps> = ({ onSearchResults, onClearSearch, i
     try {
       const response = await searchPhotos(query.trim());
       if (response.success) {
-        onSearchResults(response.matches);
+        // Extract photos from search results while maintaining order
+        const photos = response.results.map(result => result.photo);
+        onSearchResults(photos);
         if (response.count === 0) {
           setError('No photos found matching your search');
         }

@@ -138,7 +138,7 @@ const PhotoUpload: React.FC<PhotoUploadProps> = ({ onUploadComplete }) => {
 
       for (let i = 0; i < previews.length; i++) {
         const preview = previews[i];
-        setUploadProgress(`Processing photo ${i + 1} of ${previews.length}...`);
+        setUploadProgress(`Resizing and processing photo ${i + 1} of ${previews.length}...`);
         
         const base64Data = await fileToBase64(preview.file);
         
@@ -203,6 +203,7 @@ const PhotoUpload: React.FC<PhotoUploadProps> = ({ onUploadComplete }) => {
                 <p>Drag & drop photos here, or <span className="click-text">click to select</span></p>
                 <p className="upload-hint">Supports JPEG, PNG, GIF, WebP, and BMP files</p>
                 <p className="upload-hint">📍 Location and 📅 date will be automatically extracted from EXIF data</p>
+                <p className="upload-hint">🖼️ Images will be resized to 512px (max dimension) for optimal processing</p>
               </>
             )}
           </div>

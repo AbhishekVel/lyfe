@@ -3,6 +3,7 @@ import './App.css';
 import PhotoGallery from './components/PhotoGallery';
 import PhotoUpload from './components/PhotoUpload';
 import SearchBar from './components/SearchBar';
+import DeleteAllData from './components/DeleteAllData';
 import { Photo, healthCheck } from './api';
 
 type ViewMode = 'gallery' | 'upload';
@@ -43,6 +44,12 @@ function App() {
     // Refresh the gallery after successful upload
     setRefreshTrigger(prev => prev + 1);
     // Clear search mode to show all photos including newly uploaded ones
+    handleClearSearch();
+  };
+
+  const handleDataDeleted = () => {
+    // Refresh the gallery and clear search after data deletion
+    setRefreshTrigger(prev => prev + 1);
     handleClearSearch();
   };
 
@@ -129,10 +136,15 @@ function App() {
 
       <footer className="app-footer">
         <div className="footer-content">
-          <p>
-            <span className={`status-indicator ${backendStatus}`}></span>
-            Connected to backend at localhost:8000
-          </p>
+          <div className="footer-status">
+            <p>
+              <span className={`status-indicator ${backendStatus}`}></span>
+              Connected to backend at localhost:8000
+            </p>
+          </div>
+          <div className="footer-actions">
+            <DeleteAllData onDataDeleted={handleDataDeleted} />
+          </div>
         </div>
       </footer>
     </div>

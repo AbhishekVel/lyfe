@@ -2,9 +2,14 @@ from flask import request, jsonify
 import os
 import base64
 from datetime import datetime
-from photo_service import upload_photos_to_db, search_photos
+from photo_service import search_photos, gen_image_embedding_from_base64, update_index_with_photo_id, exists_in_index_by_photo_id, get_vector_count_in_namespace, delete_all_vectors_from_namespace
 from models import Photo
 from database import db
+import logging
+
+# Set up logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 
 def health_check():
@@ -39,6 +44,7 @@ def upload_photos_batch():
         
         created_photos = []
         errors = []
+        vector_processing_errors = []
         
         for i, photo_data in enumerate(photos):
             try:
@@ -76,7 +82,7 @@ def upload_photos_batch():
                     errors.append(f"Photo {i}: Unable to detect file type from base64 data")
                     continue
                 
-                # Create photo record
+                # Create photo record in PostgreSQL first
                 photo = Photo(
                     data=base64_data,
                     file_type=file_type,
@@ -86,8 +92,34 @@ def upload_photos_batch():
                 )
                 
                 db.session.add(photo)
+                db.session.flush()  # Flush to get the photo ID without committing
+                
+                # Now we have the photo ID, attempt vector processing
+                try:
+                    # Check if vector already exists for this photo ID
+                    if not exists_in_index_by_photo_id(str(photo.id)):
+                        # Generate embedding from base64 data
+                        image_embedding = gen_image_embedding_from_base64(base64_data)
+                        logger.info(f"Successfully generated embedding for photo ID {photo.id}")
+                        
+                        # Store vector in Pinecone using photo ID
+                        update_index_with_photo_id(
+                            photo_id=str(photo.id), 
+                            embedding=image_embedding
+                        )
+                        logger.info(f"Successfully stored vector in Pinecone for photo ID {photo.id}")
+                    else:
+                        logger.info(f"Vector already exists in Pinecone for photo ID {photo.id}, skipping")
+                    
+                except Exception as vector_error:
+                    # Log vector processing error but don't fail the photo upload
+                    error_msg = f"Photo {i} (ID: {photo.id}): Vector processing failed - {str(vector_error)}"
+                    vector_processing_errors.append(error_msg)
+                    logger.error(error_msg)
+                
                 created_photos.append({
                     'index': i,
+                    'id': photo.id,
                     'location': location,
                     'timestamp': timestamp_str,
                     'file_type': file_type
@@ -95,26 +127,34 @@ def upload_photos_batch():
                 
             except Exception as e:
                 errors.append(f"Photo {i}: {str(e)}")
+                db.session.rollback()
+                continue
         
         # Commit all successful photos
         if created_photos:
             db.session.commit()
+            logger.info(f"Successfully uploaded {len(created_photos)} photos to PostgreSQL")
         
         response = {
             "success": len(created_photos) > 0,
             "created_count": len(created_photos),
             "error_count": len(errors),
+            "vector_processing_error_count": len(vector_processing_errors),
             "created_photos": created_photos
         }
         
         if errors:
             response["errors"] = errors
         
+        if vector_processing_errors:
+            response["vector_processing_errors"] = vector_processing_errors
+        
         status_code = 200 if created_photos else 400
         return jsonify(response), status_code
         
     except Exception as e:
         db.session.rollback()
+        logger.error(f"Failed to upload photos: {str(e)}")
         return jsonify({"error": f"Failed to upload photos: {str(e)}"}), 500
 
 
@@ -151,42 +191,12 @@ def detect_file_type(base64_data):
         return 'jpg'  # Default fallback
 
 
-def upload_photos_endpoint():
-    """
-    Upload photos from a directory to the vector database
-    Expected JSON payload: {"directory": "/path/to/photos"}
-    """
-    try:
-        data = request.get_json()
-        if not data or 'directory' not in data:
-            return jsonify({"error": "Missing 'directory' field in request body"}), 400
-        
-        directory = data['directory']
-        
-        # Validate directory exists
-        if not os.path.exists(directory):
-            return jsonify({"error": f"Directory '{directory}' does not exist"}), 400
-        
-        if not os.path.isdir(directory):
-            return jsonify({"error": f"Path '{directory}' is not a directory"}), 400
-        
-        # Process photos
-        result = upload_photos_to_db(directory)
-        
-        return jsonify({
-            "success": True,
-            "message": f"Processed {result['processed']} out of {result['total_found']} photos",
-            "details": result
-        })
-        
-    except Exception as e:
-        return jsonify({"error": f"Failed to upload photos: {str(e)}"}), 500
-
 
 def search_photos_endpoint():
     """
     Search for photos using a text query
     Expected JSON payload: {"query": "search text"}
+    Returns complete Photo objects from PostgreSQL based on vector search results
     """
     try:
         data = request.get_json()
@@ -197,17 +207,18 @@ def search_photos_endpoint():
         if not query:
             return jsonify({"error": "Query cannot be empty"}), 400
         
-        # Search photos
-        matches = search_photos(query)
+        # Search photos - now returns complete Photo objects
+        search_results = search_photos(query)
         
         return jsonify({
             "success": True,
             "query": query,
-            "matches": matches,
-            "count": len(matches)
+            "results": search_results,
+            "count": len(search_results)
         })
         
     except Exception as e:
+        logger.error(f"Failed to search photos: {str(e)}")
         return jsonify({"error": f"Failed to search photos: {str(e)}"}), 500
 
 
@@ -246,10 +257,102 @@ def get_photos_endpoint():
         return jsonify({"error": f"Failed to get photos: {str(e)}"}), 500
 
 
+def delete_all_data_endpoint():
+    """
+    Delete all photos from PostgreSQL database and all vectors from Pinecone namespace
+    This is a destructive operation that cannot be undone.
+    """
+    try:
+        # Check if request includes confirmation
+        data = request.get_json() or {}
+        confirmed = data.get('confirmed', False)
+        
+        if not confirmed:
+            # Return counts for confirmation
+            photo_count = Photo.query.count()
+            success, vector_info = get_vector_count_in_namespace()
+            vector_count = vector_info if success else "unknown"
+            
+            return jsonify({
+                "success": False,
+                "message": "Confirmation required. This will delete all data permanently.",
+                "data_to_delete": {
+                    "postgresql_photos": photo_count,
+                    "pinecone_vectors": vector_count
+                },
+                "confirmation_required": True,
+                "note": "Send POST request with {'confirmed': true} to proceed"
+            }), 200
+        
+        # Proceed with deletion
+        logger.info("Starting delete_all_data operation")
+        
+        # Get initial counts
+        photo_count_before = Photo.query.count()
+        success, vector_info = get_vector_count_in_namespace()
+        vector_count_before = vector_info if success else 0
+        
+        logger.info(f"Found {photo_count_before} photos in PostgreSQL and {vector_count_before} vectors in Pinecone")
+        
+        deletion_results = {
+            "postgresql": {"before": photo_count_before, "deleted": 0, "success": False, "error": None},
+            "pinecone": {"before": vector_count_before, "success": False, "error": None}
+        }
+        
+        # Delete vectors from Pinecone first
+        logger.info("Deleting vectors from Pinecone...")
+        pinecone_success, pinecone_result = delete_all_vectors_from_namespace()
+        deletion_results["pinecone"]["success"] = pinecone_success
+        if not pinecone_success:
+            deletion_results["pinecone"]["error"] = pinecone_result
+            logger.error(f"Pinecone deletion failed: {pinecone_result}")
+        else:
+            logger.info("Successfully deleted vectors from Pinecone")
+        
+        # Delete photos from PostgreSQL
+        logger.info("Deleting photos from PostgreSQL...")
+        try:
+            deleted_count = Photo.query.delete()
+            db.session.commit()
+            deletion_results["postgresql"]["deleted"] = deleted_count
+            deletion_results["postgresql"]["success"] = True
+            logger.info(f"Successfully deleted {deleted_count} photos from PostgreSQL")
+        except Exception as e:
+            db.session.rollback()
+            deletion_results["postgresql"]["error"] = str(e)
+            logger.error(f"PostgreSQL deletion failed: {str(e)}")
+        
+        # Verify deletions
+        photo_count_after = Photo.query.count()
+        
+        # Determine overall success
+        overall_success = deletion_results["postgresql"]["success"] and deletion_results["pinecone"]["success"]
+        
+        response = {
+            "success": overall_success,
+            "message": "Data deletion completed" if overall_success else "Data deletion completed with some errors",
+            "results": deletion_results,
+            "verification": {
+                "postgresql_photos_remaining": photo_count_after
+            }
+        }
+        
+        status_code = 200 if overall_success else 207  # 207 Multi-Status for partial success
+        return jsonify(response), status_code
+        
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"Failed to delete all data: {str(e)}")
+        return jsonify({
+            "success": False,
+            "error": f"Failed to delete all data: {str(e)}"
+        }), 500
+
+
 def register_routes(app):
     """Register all routes with the Flask app"""
     app.add_url_rule('/health', 'health_check', health_check, methods=['GET'])
     app.add_url_rule('/upload_photos', 'upload_photos_batch', upload_photos_batch, methods=['POST'])
-    app.add_url_rule('/upload', 'upload_photos', upload_photos_endpoint, methods=['POST'])
+    app.add_url_rule('/photos', 'get_photos', get_photos_endpoint, methods=['GET'])
     app.add_url_rule('/search', 'search_photos', search_photos_endpoint, methods=['POST'])
-    app.add_url_rule('/photos', 'get_photos', get_photos_endpoint, methods=['GET']) 
+    app.add_url_rule('/delete_all_data', 'delete_all_data', delete_all_data_endpoint, methods=['POST', 'DELETE']) 

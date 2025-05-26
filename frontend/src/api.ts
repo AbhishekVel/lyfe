@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { resizeImageToBase64 } from './utils/imageUtils';
 
 const API_BASE_URL = 'http://localhost:8000';
 
@@ -45,11 +46,45 @@ export interface UploadResponse {
   errors?: string[];
 }
 
+export interface SearchResult {
+  photo: Photo;
+  score: number;
+  photo_id: number;
+}
+
 export interface SearchResponse {
   success: boolean;
   query: string;
-  matches: Photo[];
+  results: SearchResult[];
   count: number;
+}
+
+export interface DeleteAllDataResponse {
+  success: boolean;
+  message: string;
+  data_to_delete?: {
+    postgresql_photos: number;
+    pinecone_vectors: number | string;
+  };
+  confirmation_required?: boolean;
+  note?: string;
+  results?: {
+    postgresql: {
+      before: number;
+      deleted: number;
+      success: boolean;
+      error: string | null;
+    };
+    pinecone: {
+      before: number | string;
+      success: boolean;
+      error: string | null;
+    };
+  };
+  verification?: {
+    postgresql_photos_remaining: number;
+  };
+  error?: string;
 }
 
 // API Functions
@@ -73,20 +108,18 @@ export const healthCheck = async (): Promise<{ status: string; service: string }
   return response.data;
 };
 
-// Helper function to convert File to base64
+export const deleteAllDataPreview = async (): Promise<DeleteAllDataResponse> => {
+  const response = await api.post('/delete_all_data', {});
+  return response.data;
+};
+
+export const deleteAllDataConfirm = async (): Promise<DeleteAllDataResponse> => {
+  const response = await api.post('/delete_all_data', { confirmed: true });
+  return response.data;
+};
+
+// Helper function to convert File to base64 with resizing
 export const fileToBase64 = (file: File): Promise<string> => {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.readAsDataURL(file);
-    reader.onload = () => {
-      if (typeof reader.result === 'string') {
-        // Remove the data URL prefix and return just the base64 data
-        const base64Data = reader.result.split(',')[1];
-        resolve(base64Data);
-      } else {
-        reject(new Error('Failed to convert file to base64'));
-      }
-    };
-    reader.onerror = error => reject(error);
-  });
+  // Use the new resize function that resizes to 512px max dimension
+  return resizeImageToBase64(file, 512);
 }; 
