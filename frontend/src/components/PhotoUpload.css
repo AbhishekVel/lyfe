@@ -342,6 +342,15 @@
   color: #666;
 }
 
+.date-taken {
+  font-size: 0.85rem;
+  color: #28a745;
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
 /* Responsive design */
 @media (max-width: 768px) {
   .photo-upload {

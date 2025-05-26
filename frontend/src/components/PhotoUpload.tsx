@@ -1,7 +1,7 @@
 import React, { useState, useCallback } from 'react';
 import { useDropzone } from 'react-dropzone';
 import { uploadPhotos, fileToBase64, UploadPhotoData } from '../api';
-import { getImageLocation } from '../utils/locationUtils';
+import { getImageMetadata, formatDateTaken } from '../utils/photoUtils';
 import './PhotoUpload.css';
 
 interface PhotoUploadProps {
@@ -12,6 +12,7 @@ interface PreviewPhoto {
   file: File;
   preview: string;
   location: string;
+  dateTaken: Date | null;
   locationLoading: boolean;
   locationError?: string;
 }
@@ -23,7 +24,7 @@ const PhotoUpload: React.FC<PhotoUploadProps> = ({ onUploadComplete }) => {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
-  const extractLocationFromImage = async (file: File, index: number) => {
+  const extractMetadataFromImage = async (file: File, index: number) => {
     try {
       setPreviews(prev => 
         prev.map((preview, i) => 
@@ -31,26 +32,28 @@ const PhotoUpload: React.FC<PhotoUploadProps> = ({ onUploadComplete }) => {
         )
       );
 
-      const location = await getImageLocation(file);
+      const metadata = await getImageMetadata(file);
       
       setPreviews(prev => 
         prev.map((preview, i) => 
           i === index ? { 
             ...preview, 
-            location: location || 'Unknown Location',
+            location: metadata.location || 'Unknown Location',
+            dateTaken: metadata.dateTaken,
             locationLoading: false,
-            locationError: location ? undefined : 'No GPS data found'
+            locationError: !metadata.location && !metadata.dateTaken ? 'No EXIF data found' : 
+                          !metadata.location ? 'No GPS data found' : undefined
           } : preview
         )
       );
     } catch (error) {
-      console.error('Error extracting location:', error);
+      console.error('Error extracting metadata:', error);
       setPreviews(prev => 
         prev.map((preview, i) => 
           i === index ? { 
             ...preview, 
             locationLoading: false,
-            locationError: 'Failed to extract location'
+            locationError: 'Failed to extract metadata'
           } : preview
         )
       );
@@ -70,16 +73,17 @@ const PhotoUpload: React.FC<PhotoUploadProps> = ({ onUploadComplete }) => {
       file,
       preview: URL.createObjectURL(file),
       location: 'Unknown Location',
+      dateTaken: null,
       locationLoading: false
     }));
 
     setPreviews(prev => {
       const allPreviews = [...prev, ...newPreviews];
       
-      // Extract location for each new image
+      // Extract metadata for each new image
       newPreviews.forEach((_, newIndex) => {
         const actualIndex = prev.length + newIndex;
-        extractLocationFromImage(imageFiles[newIndex], actualIndex);
+        extractMetadataFromImage(imageFiles[newIndex], actualIndex);
       });
       
       return allPreviews;
@@ -111,10 +115,10 @@ const PhotoUpload: React.FC<PhotoUploadProps> = ({ onUploadComplete }) => {
     );
   };
 
-  const retryLocationExtraction = (index: number) => {
+  const retryMetadataExtraction = (index: number) => {
     const preview = previews[index];
     if (preview) {
-      extractLocationFromImage(preview.file, index);
+      extractMetadataFromImage(preview.file, index);
     }
   };
 
@@ -137,10 +141,14 @@ const PhotoUpload: React.FC<PhotoUploadProps> = ({ onUploadComplete }) => {
         setUploadProgress(`Processing photo ${i + 1} of ${previews.length}...`);
         
         const base64Data = await fileToBase64(preview.file);
+        
+        // Use extracted date if available, otherwise use current time
+        const timestamp = preview.dateTaken ? preview.dateTaken.toISOString() : new Date().toISOString();
+        
         uploadData.push({
           data: base64Data,
           location: preview.location || 'Unknown Location',
-          timestamp: new Date().toISOString()
+          timestamp: timestamp
         });
       }
 
@@ -194,7 +202,7 @@ const PhotoUpload: React.FC<PhotoUploadProps> = ({ onUploadComplete }) => {
               <>
                 <p>Drag & drop photos here, or <span className="click-text">click to select</span></p>
                 <p className="upload-hint">Supports JPEG, PNG, GIF, WebP, and BMP files</p>
-                <p className="upload-hint">📍 Location will be automatically extracted from GPS data</p>
+                <p className="upload-hint">📍 Location and 📅 date will be automatically extracted from EXIF data</p>
               </>
             )}
           </div>
@@ -274,14 +282,14 @@ const PhotoUpload: React.FC<PhotoUploadProps> = ({ onUploadComplete }) => {
                     {preview.locationLoading && (
                       <div className="location-status loading">
                         <div className="location-spinner"></div>
-                        <span>Getting location...</span>
+                        <span>Extracting metadata...</span>
                       </div>
                     )}
                     {preview.locationError && (
                       <div className="location-status error">
                         <span>⚠️ {preview.locationError}</span>
                         <button
-                          onClick={() => retryLocationExtraction(index)}
+                          onClick={() => retryMetadataExtraction(index)}
                           className="retry-location-button"
                           disabled={uploading || preview.locationLoading}
                         >
@@ -295,6 +303,11 @@ const PhotoUpload: React.FC<PhotoUploadProps> = ({ onUploadComplete }) => {
                     <span className="file-size">
                       {(preview.file.size / 1024 / 1024).toFixed(2)} MB
                     </span>
+                    {preview.dateTaken && (
+                      <span className="date-taken">
+                        📅 Taken: {formatDateTaken(preview.dateTaken)}
+                      </span>
+                    )}
                   </div>
                 </div>
               </div>
