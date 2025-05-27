@@ -5,6 +5,7 @@ from datetime import datetime
 from photo_service import search_photos, gen_image_embedding_from_base64, update_index_with_photo_id, exists_in_index_by_photo_id, get_vector_count_in_namespace, delete_all_vectors_from_namespace
 from models import Photo
 from database import db
+from chat import run_chat, Message, TextInput
 import logging
 
 # Set up logging
@@ -192,34 +193,34 @@ def detect_file_type(base64_data):
 
 
 
-def search_photos_endpoint():
-    """
-    Search for photos using a text query
-    Expected JSON payload: {"query": "search text"}
-    Returns complete Photo objects from PostgreSQL based on vector search results
-    """
-    try:
-        data = request.get_json()
-        if not data or 'query' not in data:
-            return jsonify({"error": "Missing 'query' field in request body"}), 400
+# def search_photos_endpoint():
+#     """
+#     Search for photos using a text query
+#     Expected JSON payload: {"query": "search text"}
+#     Returns complete Photo objects from PostgreSQL based on vector search results
+#     """
+#     try:
+#         data = request.get_json()
+#         if not data or 'query' not in data:
+#             return jsonify({"error": "Missing 'query' field in request body"}), 400
         
-        query = data['query'].strip()
-        if not query:
-            return jsonify({"error": "Query cannot be empty"}), 400
+#         query = data['query'].strip()
+#         if not query:
+#             return jsonify({"error": "Query cannot be empty"}), 400
         
-        # Search photos - now returns complete Photo objects
-        search_results = search_photos(query)
+#         # Search photos - now returns complete Photo objects
+#         search_results = search_photos(query)
         
-        return jsonify({
-            "success": True,
-            "query": query,
-            "results": search_results,
-            "count": len(search_results)
-        })
+#         return jsonify({
+#             "success": True,
+#             "query": query,
+#             "results": search_results,
+#             "count": len(search_results)
+#         })
         
-    except Exception as e:
-        logger.error(f"Failed to search photos: {str(e)}")
-        return jsonify({"error": f"Failed to search photos: {str(e)}"}), 500
+#     except Exception as e:
+#         logger.error(f"Failed to search photos: {str(e)}")
+#         return jsonify({"error": f"Failed to search photos: {str(e)}"}), 500
 
 
 def get_photos_endpoint():
@@ -349,10 +350,58 @@ def delete_all_data_endpoint():
         }), 500
 
 
+def chat_endpoint():
+    logger.info("Chat endpoint called")
+    try:
+        data = request.get_json()
+        if not data or 'messages' not in data:
+            return jsonify({"error": "Missing 'messages' field in request body"}), 400
+        
+        logger.info(f"Data: {data}")
+        
+        messages_data = data['messages']
+        if not isinstance(messages_data, list):
+            return jsonify({"error": "'messages' must be a list"}), 400
+        
+        if not messages_data:
+            return jsonify({"error": "Messages list cannot be empty"}), 400
+        
+        # Convert dict messages to Message objects
+        messages = []
+        for msg_data in messages_data:
+            try:
+                message = Message.from_dict(msg_data)
+                messages.append(message)
+            except Exception as e:
+                return jsonify({"error": f"Invalid message format: {str(e)}"}), 400
+        
+        # Run the chat and get response
+        response = run_chat(messages)
+        
+        if response is None:
+            return jsonify({"error": "Failed to get response from chat service"}), 500
+        
+        # Convert response to Message format
+        response_message = Message(
+            role="assistant", 
+            content=[TextInput(text=response.get_message() or "")]
+        )
+        
+        return jsonify({
+            "success": True,
+            "response": response_message.to_dict()
+        })
+        
+    except Exception as e:
+        logger.error(f"Failed to process chat: {str(e)}")
+        return jsonify({"error": f"Failed to process chat: {str(e)}"}), 500
+
+
 def register_routes(app):
     """Register all routes with the Flask app"""
     app.add_url_rule('/health', 'health_check', health_check, methods=['GET'])
     app.add_url_rule('/upload_photos', 'upload_photos_batch', upload_photos_batch, methods=['POST'])
     app.add_url_rule('/photos', 'get_photos', get_photos_endpoint, methods=['GET'])
-    app.add_url_rule('/search', 'search_photos', search_photos_endpoint, methods=['POST'])
-    app.add_url_rule('/delete_all_data', 'delete_all_data', delete_all_data_endpoint, methods=['POST', 'DELETE']) 
+    # app.add_url_rule('/search', 'search_photos', search_photos_endpoint, methods=['POST'])
+    app.add_url_rule('/delete_all_data', 'delete_all_data', delete_all_data_endpoint, methods=['POST', 'DELETE'])
+    app.add_url_rule('/chat', 'chat', chat_endpoint, methods=['POST']) 

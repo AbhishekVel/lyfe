@@ -1,7 +1,7 @@
 from flask import Flask
 from flask_cors import CORS
 import os
-from routes import register_routes
+from public_api import register_routes
 from database import init_db
 from models import Photo  # Import models to register them
 

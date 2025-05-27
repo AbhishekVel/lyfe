@@ -219,11 +219,9 @@ def gen_caption_embedding(path: str) -> Optional[list[float]]:
     return gen_text_embedding(location)
 
 
-def search_photos(query: str):
+def search_photos(query: str, threshold: float = 0.1) -> List[Photo]:
     """Search for photos using text query and return complete Photo objects from PostgreSQL"""
     try:
-        # Import here to avoid circular imports
-        
         # Generate embedding for search query
         query_embedding = gen_text_embedding(query)
 
@@ -236,6 +234,9 @@ def search_photos(query: str):
         # Extract photo IDs from Pinecone results
         photo_ids = []
         for match in search_results.matches:
+            if match.score < threshold:
+                continue
+
             # The vector ID should be the PostgreSQL photo ID (string)
             try:
                 photo_id = int(match.id)  # Convert string ID back to integer
@@ -250,32 +251,8 @@ def search_photos(query: str):
 
         # Fetch Photo objects from PostgreSQL using the extracted IDs
         photos = Photo.query.filter(Photo.id.in_(photo_ids)).all()
-        
-        # Create a mapping of photo ID to Photo object for efficient lookup
-        photo_dict = {photo.id: photo for photo in photos}
-        
-        # Build results maintaining the order and scores from Pinecone
-        results = []
-        for match in search_results.matches:
-            try:
-                photo_id = int(match.id)
-                if photo_id in photo_dict:
-                    photo = photo_dict[photo_id]
-                    results.append({
-                        "photo": photo.to_dict(),
-                        "score": match.score,
-                        "photo_id": photo_id
-                    })
-                else:
-                    # Handle case where photo exists in Pinecone but not in PostgreSQL
-                    logger.warning(f"Photo ID {photo_id} exists in Pinecone but not found in PostgreSQL")
-            except ValueError:
-                # Skip invalid photo IDs (already logged above)
-                continue
-        
-        logger.info(f"Search results: {results}")
+        return photos
 
-        return results
         
     except Exception as e:
         logger.error(f"Error searching photos: {str(e)}")

@@ -2,6 +2,11 @@
 
 A Flask web service for uploading photos to a vector database and searching them using text queries.
 
+
+## Running the local
+use DATABASE_URL=postgresql://postgres:password123@localhost:5432/lyfe with commands
+
+
 ## Features
 
 - Upload photos from a directory to Pinecone vector database

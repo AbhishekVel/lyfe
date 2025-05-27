@@ -1,138 +1,100 @@
-# Lyfe Photo Gallery Frontend
+# AI Photo Assistant Frontend
 
-A modern, responsive React application for viewing and uploading photos. This frontend connects to a local backend API running on port 8000.
+A React-based chat interface for interacting with your AI photo assistant.
 
 ## Features
 
-- 📸 **Photo Gallery**: Browse photos in a responsive grid layout with pagination
-- 🔍 **Search**: Search photos by description, location, or content using semantic search
-- 📤 **Upload**: Drag & drop or select multiple photos for upload
-- 🎨 **Modern UI**: Beautiful, responsive design with hover effects and animations
-- 📱 **Mobile Friendly**: Optimized for mobile devices
-- 🔄 **Real-time Updates**: Automatically refreshes gallery after uploads
-- ⚡ **Fast**: Lazy loading images and optimized performance
+- 💬 Clean, modern chat interface
+- 🤖 Real-time messaging with AI assistant
+- 📱 Responsive design for mobile and desktop
+- ⚡ Fast and intuitive user experience
+- 🎨 Beautiful gradient design with smooth animations
 
-## Technologies Used
+## Getting Started
 
-- **React 18** with TypeScript
-- **Axios** for API communication
-- **React Dropzone** for file uploads
-- **CSS3** with modern features (Grid, Flexbox, CSS Variables)
-- **Responsive Design** with mobile-first approach
+### Prerequisites
 
-## Prerequisites
-
-- Node.js (v16 or higher)
+- Node.js (v14 or higher)
 - npm or yarn
-- Backend API running on `http://localhost:8000`
 
-## Installation
+### Installation
 
-1. Install dependencies:
-   ```bash
-   npm install
-   ```
+1. Navigate to the frontend directory:
+```bash
+cd frontend
+```
 
-2. Start the development server:
-   ```bash
-   npm start
-   ```
+2. Install dependencies:
+```bash
+npm install
+```
 
-3. Open [http://localhost:3000](http://localhost:3000) in your browser
+3. Start the development server:
+```bash
+npm start
+```
 
-## API Endpoints
+The application will open in your browser at `http://localhost:3000`.
 
-The frontend connects to the following backend endpoints:
+### Backend Connection
 
-- `GET /health` - Health check
-- `GET /photos` - Get photos with pagination
-- `POST /upload_photos` - Upload photos (batch)
-- `POST /search` - Search photos
+The frontend is configured to connect to the backend API at `http://localhost:8000`. Make sure your backend server is running before using the chat interface.
 
 ## Usage
 
-### Viewing Photos
-- Navigate to the Gallery tab to view all photos
-- Click on any photo to view it in full size
-- Use pagination controls to browse through pages
+1. Type your message in the input field at the bottom
+2. Press Enter or click the send button (📤) to send your message
+3. Wait for the AI assistant to respond
+4. Continue the conversation!
 
-### Searching Photos
-- Use the search bar to find photos by description or location
-- Search results will replace the gallery view
-- Click "View All Photos" to return to the full gallery
+### Example Questions
 
-### Uploading Photos
-- Navigate to the Upload tab
-- Drag & drop photos or click to select files
-- Add location information for each photo
-- Click "Upload Photos" to upload to the backend
+- "When did I go to the forest?"
+- "Show me photos of dogs"
+- "What photos do I have from last summer?"
+- "Find pictures of my family"
 
-## Project Structure
+## Available Scripts
 
+- `npm start` - Runs the app in development mode
+- `npm test` - Launches the test runner
+- `npm run build` - Builds the app for production
+- `npm run eject` - Ejects from Create React App (one-way operation)
+
+## Technologies Used
+
+- React 18
+- Axios for HTTP requests
+- CSS3 with modern features
+- Create React App for build tooling
+
+## API Integration
+
+The frontend communicates with the backend using the `/chat` endpoint:
+
+**Request Format:**
+```json
+{
+  "messages": [
+    {
+      "role": "user",
+      "content": [
+        {"type": "input_text", "text": "Your message here"}
+      ]
+    }
+  ]
+}
 ```
-src/
-├── components/           # React components
-│   ├── PhotoGallery.tsx  # Main gallery component
-│   ├── PhotoUpload.tsx   # Upload interface
-│   ├── SearchBar.tsx     # Search functionality
-│   └── *.css             # Component styles
-├── api.ts               # API service layer
-├── App.tsx              # Main application
-├── App.css              # Global app styles
-└── index.tsx            # Application entry point
+
+**Response Format:**
+```json
+{
+  "success": true,
+  "response": {
+    "role": "assistant",
+    "content": [
+      {"type": "input_text", "text": "AI response here"}
+    ]
+  }
+}
 ```
-
-## Features in Detail
-
-### Photo Gallery
-- Responsive grid layout
-- Hover effects with photo information
-- Full-screen modal view
-- Pagination for large collections
-- Error handling and loading states
-
-### Photo Upload
-- Drag & drop interface
-- Multiple file selection
-- Photo previews before upload
-- Location tagging
-- Progress indicators
-- File type validation
-
-### Search
-- Real-time search functionality
-- Search by location or content
-- Results highlighting
-- Clear search option
-
-## Development
-
-### Available Scripts
-
-- `npm start` - Start development server
-- `npm run build` - Build for production
-- `npm test` - Run tests
-- `npm run eject` - Eject from Create React App
-
-### Customization
-
-You can customize the API base URL by modifying the `API_BASE_URL` constant in `src/api.ts`.
-
-## Browser Support
-
-- Chrome (latest)
-- Firefox (latest)
-- Safari (latest)
-- Edge (latest)
-
-## Contributing
-
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Test thoroughly
-5. Submit a pull request
-
-## License
-
-This project is part of the Lyfe application suite.

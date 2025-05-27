@@ -10,6 +10,7 @@ services:
     environment:
       - GCP_PROJECT_ID=${GCP_PROJECT_ID}
       - PINECONE_API_KEY=${PINECONE_API_KEY}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
       - FLASK_ENV=production
       - GOOGLE_APPLICATION_CREDENTIALS=/app/gcloud/application_default_credentials.json
     volumes:
